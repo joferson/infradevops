@@ -26,7 +26,7 @@ terraform:validate:
   before_script:
     - apk add --no-cache curl unzip
     - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
@@ -44,7 +44,7 @@ infra:test:
   before_script:
     - apk add --no-cache curl unzip
     - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
@@ -77,7 +77,7 @@ deploy:dev:
   before_script:
     - apk add --no-cache curl unzip
     - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
@@ -97,7 +97,7 @@ deploy:prod:
   before_script:
     - apk add --no-cache curl unzip
     - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
