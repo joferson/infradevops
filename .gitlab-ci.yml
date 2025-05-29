@@ -24,31 +24,39 @@ create_project:
 
       # Função para ler input do usuário
       read_input() {
-        local prompt=$1
-        local default=$2
+        local prompt="$1"
+        local default="$2"
         local input
         
         if [ -n "$default" ]; then
-          read -p "$prompt [$default]: " input
-          echo "${input:-$default}"
+          printf "%s [%s]: " "$prompt" "$default"
+          read input
+          if [ -z "$input" ]; then
+            echo "$default"
+          else
+            echo "$input"
+          fi
         else
-          read -p "$prompt: " input
+          printf "%s: " "$prompt"
+          read input
           echo "$input"
         fi
       }
 
       # Função para selecionar opção de uma lista
       select_option() {
-        local prompt=$1
-        local options=$2
+        local prompt="$1"
+        local options="$2"
         local selected
+        local num_options
         
         echo "$prompt"
         echo "$options" | nl
-        local num_options=$(echo "$options" | wc -l)
+        num_options=$(echo "$options" | wc -l)
         
         while true; do
-          read -p "Escolha uma opção (1-$num_options): " selected
+          printf "Escolha uma opção (1-%d): " "$num_options"
+          read selected
           if [ "$selected" -ge 1 ] && [ "$selected" -le "$num_options" ]; then
             echo "$options" | sed -n "${selected}p"
             break
@@ -69,9 +77,11 @@ create_project:
 
       # Função para criar um novo grupo
       create_group() {
-        local group_name=$1
-        local group_path=$2
-        local group_description=$3
+        local group_name="$1"
+        local group_path="$2"
+        local group_description="$3"
+        local response
+        local group_id
 
         echo "Criando grupo $group_name..."
         response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
@@ -83,19 +93,19 @@ create_project:
         if echo "$response" | jq -e '.id' > /dev/null; then
           group_id=$(echo "$response" | jq -r '.id')
           echo "Grupo criado com sucesso! ID: $group_id"
-          return $group_id
+          echo "$group_id"
         else
           echo "Erro ao criar grupo:"
           echo "$response" | jq -r '.message'
-          return 1
+          echo "1"
         fi
       }
 
       # Função para criar arquivos base do projeto
       create_project_files() {
-        local project_type=$1
-        local language=$2
-        local project_name=$3
+        local project_type="$1"
+        local language="$2"
+        local project_name="$3"
 
         # Cria diretório temporário
         mkdir -p /tmp/project_template
@@ -252,16 +262,15 @@ create_project:
       case "$group_choice" in
         "Usar grupo existente")
           GROUP_ID=$(read_input "Digite o ID do grupo existente")
-          namespace_id=$GROUP_ID
+          namespace_id="$GROUP_ID"
           ;;
         "Criar novo grupo")
           GROUP_NAME=$(read_input "Digite o nome do novo grupo")
           GROUP_PATH=$(read_input "Digite o path do novo grupo" "$GROUP_NAME")
           GROUP_DESCRIPTION=$(read_input "Digite a descrição do grupo" "Grupo criado automaticamente")
           
-          create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION"
-          namespace_id=$?
-          if [ $namespace_id -eq 1 ]; then
+          namespace_id=$(create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION")
+          if [ "$namespace_id" = "1" ]; then
             echo "Erro ao criar grupo. Criando projeto sem grupo..."
             namespace_id=""
           fi
