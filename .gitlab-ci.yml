@@ -111,6 +111,11 @@ infra:test:
       }
       EOF
     - cd terraform/environments/dev
+    - |
+      cat > dev.tfvars << 'EOF'
+      environment = "development"
+      bucket_name = "infradevops-dev-bucket"
+      EOF
     - terraform init
     - terraform plan -out=tfplan -var-file=dev.tfvars
   artifacts:
