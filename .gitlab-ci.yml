@@ -1,0 +1,90 @@
+image: alpine:latest
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+stages:
+  - validate
+  - test
+  - build
+  - deploy
+
+# Cache para dependências
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .terraform/
+    - .terraform.lock.hcl
+
+# Validação do Terraform
+terraform:validate:
+  stage: validate
+  image: hashicorp/terraform:latest
+  script:
+    - terraform init
+    - terraform validate
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Testes de infraestrutura
+infra:test:
+  stage: test
+  image: hashicorp/terraform:latest
+  script:
+    - terraform init
+    - terraform plan -out=tfplan
+  artifacts:
+    paths:
+      - tfplan
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Build e push de imagens Docker (se necessário)
+docker:build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  only:
+    - master
+
+# Deploy para ambiente de desenvolvimento
+deploy:dev:
+  stage: deploy
+  image: hashicorp/terraform:latest
+  script:
+    - terraform init
+    - terraform apply -auto-approve tfplan
+  environment:
+    name: development
+  only:
+    - master
+  when: manual
+
+# Deploy para ambiente de produção
+deploy:prod:
+  stage: deploy
+  image: hashicorp/terraform:latest
+  script:
+    - terraform init
+    - terraform apply -auto-approve tfplan
+  environment:
+    name: production
+  only:
+    - master
+  when: manual
+
+# Notificações
+notify:
+  stage: .post
+  script:
+    - echo "Pipeline completed!"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_COMMIT_BRANCH == "master" 

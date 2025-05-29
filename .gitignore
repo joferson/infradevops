@@ -29,11 +29,24 @@ Thumbs.db
 # Logs
 *.log
 
-# Local development
+# Environment variables
 .env
+.env.*
+!.env.example
+
+# Local development
 .env.local
 .env.*.local
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Histórico local do chat
+HISTORICO_CHAT.md
+
+# Script local de configuração de ambiente
+scripts/setup-env.sh
+
+# Scripts locais com dados sensíveis
+scripts/gitlab-create-variables.sh 
