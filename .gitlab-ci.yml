@@ -23,6 +23,7 @@ terraform:validate:
   stage: validate
   image: hashicorp/terraform:latest
   script:
+    - cd terraform/environments/dev
     - terraform init
     - terraform validate
   rules:
@@ -34,11 +35,12 @@ infra:test:
   stage: test
   image: hashicorp/terraform:latest
   script:
+    - cd terraform/environments/dev
     - terraform init
     - terraform plan -out=tfplan
   artifacts:
     paths:
-      - tfplan
+      - terraform/environments/dev/tfplan
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -60,6 +62,7 @@ deploy:dev:
   stage: deploy
   image: hashicorp/terraform:latest
   script:
+    - cd terraform/environments/dev
     - terraform init
     - terraform apply -auto-approve tfplan
   environment:
@@ -73,6 +76,7 @@ deploy:prod:
   stage: deploy
   image: hashicorp/terraform:latest
   script:
+    - cd terraform/environments/prod
     - terraform init
     - terraform apply -auto-approve tfplan
   environment:
