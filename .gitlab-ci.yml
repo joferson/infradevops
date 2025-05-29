@@ -22,6 +22,37 @@ create_project:
         exit 1
       fi
 
+      # Função para listar grupos existentes
+      list_groups() {
+        echo "Grupos existentes:"
+        curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          "$GITLAB_API_URL/groups" | jq -r '.[] | "ID: \(.id) - Nome: \(.name) - Path: \(.path)"'
+      }
+
+      # Função para criar um novo grupo
+      create_group() {
+        local group_name=$1
+        local group_path=$2
+        local group_description=$3
+
+        echo "Criando grupo $group_name..."
+        response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --data "name=$group_name" \
+          --data "path=$group_path" \
+          --data "description=$group_description" \
+          "$GITLAB_API_URL/groups")
+
+        if echo "$response" | jq -e '.id' > /dev/null; then
+          group_id=$(echo "$response" | jq -r '.id')
+          echo "Grupo criado com sucesso! ID: $group_id"
+          return 0
+        else
+          echo "Erro ao criar grupo:"
+          echo "$response" | jq -r '.message'
+          return 1
+        fi
+      }
+
       # Função para criar arquivos base do projeto
       create_project_files() {
         local project_type=$1
@@ -137,14 +168,32 @@ create_project:
         git commit -m "Initial commit: Template $project_type em $language"
       }
 
-      # Cria o projeto no GitLab
-      echo "Criando projeto $CI_PROJECT_NAME..."
+      # Lista grupos existentes
+      list_groups
+
+      # Verifica se o grupo existe
+      if [ -n "$GROUP_ID" ]; then
+        # Usa grupo existente
+        group_id=$GROUP_ID
+      else
+        # Cria novo grupo
+        if [ -z "$GROUP_NAME" ] || [ -z "$GROUP_PATH" ]; then
+          echo "Error: GROUP_NAME e GROUP_PATH são necessários para criar um novo grupo"
+          exit 1
+        fi
+        create_group "$GROUP_NAME" "$GROUP_PATH" "Grupo criado automaticamente"
+        group_id=$?
+      fi
+
+      # Cria o projeto no GitLab dentro do grupo
+      echo "Criando projeto $CI_PROJECT_NAME no grupo $group_id..."
       
       # Faz a requisição para criar o projeto
       response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
         --data "name=$CI_PROJECT_NAME" \
         --data "description=Template de projeto" \
         --data "initialize_with_readme=false" \
+        --data "namespace_id=$group_id" \
         "$GITLAB_API_URL/projects")
       
       # Verifica se a requisição foi bem sucedida
@@ -176,6 +225,9 @@ create_project:
   variables:
     PROJECT_TYPE: $CI_PROJECT_TYPE
     PROJECT_LANGUAGE: $CI_PROJECT_LANGUAGE
+    GROUP_ID: $CI_GROUP_ID
+    GROUP_NAME: $CI_GROUP_NAME
+    GROUP_PATH: $CI_GROUP_PATH
 
 # Variáveis que devem ser configuradas no GitLab CI/CD Settings > Variables
 # GITLAB_TOKEN: ${GITLAB_TOKEN}
