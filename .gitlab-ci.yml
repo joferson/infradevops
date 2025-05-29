@@ -98,7 +98,6 @@ infra:test:
 
       resource "aws_s3_bucket" "dev_bucket" {
         bucket = "infradevops-dev-bucket"
-        acl    = "private"
 
         tags = {
           Name        = "Dev Bucket"
@@ -113,7 +112,7 @@ infra:test:
       EOF
     - cd terraform/environments/dev
     - terraform init
-    - terraform plan -out=tfplan
+    - terraform plan -out=tfplan -var-file=dev.tfvars
   artifacts:
     paths:
       - terraform/environments/dev/tfplan
@@ -210,7 +209,6 @@ deploy:prod:
 
       resource "aws_s3_bucket" "prod_bucket" {
         bucket = "infradevops-prod-bucket"
-        acl    = "private"
 
         tags = {
           Name        = "Prod Bucket"
