@@ -1,312 +1,183 @@
 image: alpine:latest
 
 variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
-  TERRAFORM_VERSION: "1.7.4"
-  # Variáveis da AWS (deve ser configurado no GitLab CI/CD Settings > Variables)
-  # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-  # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-  # AWS_DEFAULT_REGION: us-east-1
+  GITLAB_API_URL: "https://gitlab.com/api/v4"
+  # Variáveis que devem ser configuradas no GitLab CI/CD Settings > Variables
+  # GITLAB_TOKEN: ${GITLAB_TOKEN}
+  # PROJECT_NAME: ${PROJECT_NAME}
+  # PROJECT_TYPE: ${PROJECT_TYPE}
 
 stages:
-  - validate
-  - test
-  - build
-  - deploy
   - create_project
-
-# Cache para dependências
-cache:
-  key: ${CI_COMMIT_REF_SLUG}
-  paths:
-    - .terraform/
-    - .terraform.lock.hcl
-
-# Validação do Terraform
-terraform:validate:
-  stage: validate
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl unzip
-    - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - rm -rf terraform
-    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - mv terraform /usr/local/bin/
-    - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-  script:
-    - mkdir -p terraform/environments/dev
-    - |
-      cat > terraform/environments/dev/main.tf << 'EOF'
-      terraform {
-        backend "local" {}
-      }
-
-      variable "environment" {
-        description = "Environment name"
-        type        = string
-      }
-
-      variable "bucket_name" {
-        description = "Name of the S3 bucket"
-        type        = string
-      }
-
-      provider "aws" {
-        region = "us-east-1"
-        # Credenciais mock para testes
-        access_key = "test"
-        secret_key = "test"
-        skip_credentials_validation = true
-        skip_requesting_account_id = true
-        skip_metadata_api_check = true
-        s3_use_path_style = true
-      }
-
-      resource "aws_s3_bucket" "dev_bucket" {
-        bucket = var.bucket_name
-
-        tags = {
-          Name        = "Dev Bucket"
-          Environment = var.environment
-        }
-      }
-
-      resource "aws_s3_bucket_acl" "dev_bucket_acl" {
-        bucket = aws_s3_bucket.dev_bucket.id
-        acl    = "private"
-      }
-      EOF
-    - cd terraform/environments/dev
-    - terraform init
-    - terraform validate
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# Testes de infraestrutura
-infra:test:
-  stage: test
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl unzip
-    - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - rm -rf terraform
-    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - mv terraform /usr/local/bin/
-    - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-  script:
-    - mkdir -p terraform/environments/dev
-    - |
-      cat > terraform/environments/dev/main.tf << 'EOF'
-      terraform {
-        backend "local" {}
-      }
-
-      variable "environment" {
-        description = "Environment name"
-        type        = string
-      }
-
-      variable "bucket_name" {
-        description = "Name of the S3 bucket"
-        type        = string
-      }
-
-      provider "aws" {
-        region = "us-east-1"
-        # Credenciais mock para testes
-        access_key = "test"
-        secret_key = "test"
-        skip_credentials_validation = true
-        skip_requesting_account_id = true
-        skip_metadata_api_check = true
-        s3_use_path_style = true
-      }
-
-      resource "aws_s3_bucket" "dev_bucket" {
-        bucket = var.bucket_name
-
-        tags = {
-          Name        = "Dev Bucket"
-          Environment = var.environment
-        }
-      }
-
-      resource "aws_s3_bucket_acl" "dev_bucket_acl" {
-        bucket = aws_s3_bucket.dev_bucket.id
-        acl    = "private"
-      }
-      EOF
-    - cd terraform/environments/dev
-    - |
-      cat > dev.tfvars << 'EOF'
-      environment = "development"
-      bucket_name = "infradevops-dev-bucket"
-      EOF
-    - terraform init
-    - terraform plan -out=tfplan -var-file=dev.tfvars
-  artifacts:
-    paths:
-      - terraform/environments/dev/tfplan
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# Build e push de imagens Docker (se necessário)
-docker:build:
-  stage: build
-  image: docker:latest
-  services:
-    - docker:dind
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-  only:
-    - master
-
-# Deploy para ambiente de desenvolvimento
-deploy:dev:
-  stage: deploy
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl unzip
-    - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - rm -rf terraform
-    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - mv terraform /usr/local/bin/
-    - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-  script:
-    - mkdir -p terraform/environments/dev
-    - |
-      cat > terraform/environments/dev/main.tf << 'EOF'
-      terraform {
-        backend "local" {}
-      }
-
-      variable "environment" {
-        description = "Environment name"
-        type        = string
-      }
-
-      variable "bucket_name" {
-        description = "Name of the S3 bucket"
-        type        = string
-      }
-
-      provider "aws" {
-        region = "us-east-1"
-        # Credenciais mock para testes
-        access_key = "test"
-        secret_key = "test"
-        skip_credentials_validation = true
-        skip_requesting_account_id = true
-        skip_metadata_api_check = true
-        s3_use_path_style = true
-      }
-
-      resource "aws_s3_bucket" "dev_bucket" {
-        bucket = var.bucket_name
-
-        tags = {
-          Name        = "Dev Bucket"
-          Environment = var.environment
-        }
-      }
-
-      resource "aws_s3_bucket_acl" "dev_bucket_acl" {
-        bucket = aws_s3_bucket.dev_bucket.id
-        acl    = "private"
-      }
-      EOF
-    - cd terraform/environments/dev
-    - terraform init
-    - terraform apply -auto-approve tfplan
-  environment:
-    name: development
-  only:
-    - master
-  when: manual
-
-# Deploy para ambiente de produção
-deploy:prod:
-  stage: deploy
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl unzip
-    - curl -LO https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - rm -rf terraform
-    - unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    - mv terraform /usr/local/bin/
-    - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-  script:
-    - mkdir -p terraform/environments/prod
-    - |
-      cat > terraform/environments/prod/main.tf << 'EOF'
-      terraform {
-        backend "local" {}
-      }
-
-      variable "environment" {
-        description = "Environment name"
-        type        = string
-      }
-
-      variable "bucket_name" {
-        description = "Name of the S3 bucket"
-        type        = string
-      }
-
-      provider "aws" {
-        region = "us-east-1"
-        # Credenciais mock para testes
-        access_key = "test"
-        secret_key = "test"
-        skip_credentials_validation = true
-        skip_requesting_account_id = true
-        skip_metadata_api_check = true
-        s3_use_path_style = true
-      }
-
-      resource "aws_s3_bucket" "prod_bucket" {
-        bucket = var.bucket_name
-
-        tags = {
-          Name        = "Prod Bucket"
-          Environment = var.environment
-        }
-      }
-
-      resource "aws_s3_bucket_acl" "prod_bucket_acl" {
-        bucket = aws_s3_bucket.prod_bucket.id
-        acl    = "private"
-      }
-      EOF
-    - cd terraform/environments/prod
-    - terraform init
-    - terraform apply -auto-approve tfplan
-  environment:
-    name: production
-  only:
-    - master
-  when: manual
-
-# Notificações
-notify:
-  stage: .post
-  script:
-    - echo "Pipeline completed!"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_COMMIT_BRANCH == "master"
 
 create_project:
   stage: create_project
+  before_script:
+    - apk add --no-cache curl jq git
   script:
-    - chmod +x scripts/create-repo-template.sh
-    - ./scripts/create-repo-template.sh $PROJECT_NAME $PROJECT_TYPE
-  only:
-    - master
+    - |
+      # Verifica se o token do GitLab está definido
+      if [ -z "$GITLAB_TOKEN" ]; then
+        echo "Error: GITLAB_TOKEN não está definido"
+        exit 1
+      fi
+
+      # Função para criar arquivos base do projeto
+      create_project_files() {
+        local project_type=$1
+        local language=$2
+        local project_name=$3
+
+        # Cria diretório temporário
+        mkdir -p /tmp/project_template
+        cd /tmp/project_template
+
+        # Cria arquivos base de acordo com o tipo e linguagem
+        case "$project_type" in
+          "api")
+            case "$language" in
+              "python")
+                # Cria estrutura para API Python
+                mkdir -p src tests
+                echo "# $project_name" > README.md
+                echo "API em Python" >> README.md
+                echo "python-dotenv==1.0.0" > requirements.txt
+                echo "pytest==7.4.0" >> requirements.txt
+                echo "fastapi==0.104.1" >> requirements.txt
+                echo "uvicorn==0.24.0" >> requirements.txt
+                ;;
+              "node")
+                # Cria estrutura para API Node.js
+                mkdir -p src tests
+                echo "# $project_name" > README.md
+                echo "API em Node.js" >> README.md
+                echo '{
+                  "name": "'$project_name'",
+                  "version": "1.0.0",
+                  "description": "API em Node.js",
+                  "main": "src/index.js",
+                  "scripts": {
+                    "start": "node src/index.js",
+                    "test": "jest"
+                  },
+                  "dependencies": {
+                    "express": "^4.18.2",
+                    "dotenv": "^16.3.1"
+                  },
+                  "devDependencies": {
+                    "jest": "^29.7.0"
+                  }
+                }' > package.json
+                ;;
+            esac
+            ;;
+          "web")
+            case "$language" in
+              "react")
+                # Cria estrutura para aplicação React
+                mkdir -p src public
+                echo "# $project_name" > README.md
+                echo "Aplicação Web em React" >> README.md
+                echo '{
+                  "name": "'$project_name'",
+                  "version": "1.0.0",
+                  "private": true,
+                  "dependencies": {
+                    "react": "^18.2.0",
+                    "react-dom": "^18.2.0",
+                    "react-scripts": "5.0.1"
+                  },
+                  "scripts": {
+                    "start": "react-scripts start",
+                    "build": "react-scripts build",
+                    "test": "react-scripts test",
+                    "eject": "react-scripts eject"
+                  }
+                }' > package.json
+                ;;
+              "vue")
+                # Cria estrutura para aplicação Vue
+                mkdir -p src public
+                echo "# $project_name" > README.md
+                echo "Aplicação Web em Vue" >> README.md
+                echo '{
+                  "name": "'$project_name'",
+                  "version": "1.0.0",
+                  "private": true,
+                  "scripts": {
+                    "serve": "vue-cli-service serve",
+                    "build": "vue-cli-service build",
+                    "lint": "vue-cli-service lint"
+                  },
+                  "dependencies": {
+                    "vue": "^3.3.4",
+                    "vue-router": "^4.2.5"
+                  },
+                  "devDependencies": {
+                    "@vue/cli-service": "^5.0.8"
+                  }
+                }' > package.json
+                ;;
+            esac
+            ;;
+        esac
+
+        # Cria arquivo .gitignore
+        echo "node_modules/" > .gitignore
+        echo "dist/" >> .gitignore
+        echo ".env" >> .gitignore
+        echo "__pycache__/" >> .gitignore
+        echo "*.pyc" >> .gitignore
+
+        # Inicializa repositório Git
+        git init
+        git add .
+        git config --global user.email "gitlab-runner@example.com"
+        git config --global user.name "GitLab Runner"
+        git commit -m "Initial commit: Template $project_type em $language"
+      }
+
+      # Cria o projeto no GitLab
+      echo "Criando projeto $CI_PROJECT_NAME..."
+      
+      # Faz a requisição para criar o projeto
+      response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        --data "name=$CI_PROJECT_NAME" \
+        --data "description=Template de projeto" \
+        --data "initialize_with_readme=false" \
+        "$GITLAB_API_URL/projects")
+      
+      # Verifica se a requisição foi bem sucedida
+      if echo "$response" | jq -e '.id' > /dev/null; then
+        project_id=$(echo "$response" | jq -r '.id')
+        project_url=$(echo "$response" | jq -r '.web_url')
+        project_ssh_url=$(echo "$response" | jq -r '.ssh_url_to_repo')
+        
+        echo "Projeto criado com sucesso!"
+        echo "ID do projeto: $project_id"
+        echo "URL do projeto: $project_url"
+        
+        # Cria os arquivos do projeto
+        create_project_files "$PROJECT_TYPE" "$PROJECT_LANGUAGE" "$CI_PROJECT_NAME"
+        
+        # Adiciona o repositório remoto e envia os arquivos
+        git remote add origin "$project_ssh_url"
+        git push -u origin master
+        
+        echo "Template do projeto criado e enviado com sucesso!"
+      else
+        echo "Erro ao criar projeto:"
+        echo "$response" | jq -r '.message'
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_COMMIT_BRANCH == "master"
   variables:
-    PROJECT_NAME: $CI_PROJECT_NAME
-    PROJECT_TYPE: $CI_PROJECT_TYPE 
+    PROJECT_TYPE: $CI_PROJECT_TYPE
+    PROJECT_LANGUAGE: $CI_PROJECT_LANGUAGE
+
+# Variáveis que devem ser configuradas no GitLab CI/CD Settings > Variables
+# GITLAB_TOKEN: ${GITLAB_TOKEN}
+# PROJECT_NAME: ${PROJECT_NAME}
+# PROJECT_TYPE: ${PROJECT_TYPE} 
