@@ -9,6 +9,7 @@ stages:
   - test
   - build
   - deploy
+  - create_project
 
 # Cache para dependências
 cache:
@@ -87,4 +88,15 @@ notify:
     - echo "Pipeline completed!"
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_COMMIT_BRANCH == "master" 
+    - if: $CI_COMMIT_BRANCH == "master"
+
+create_project:
+  stage: create_project
+  script:
+    - chmod +x scripts/create-repo-template.sh
+    - ./scripts/create-repo-template.sh $PROJECT_NAME $PROJECT_TYPE
+  only:
+    - master
+  variables:
+    PROJECT_NAME: $CI_PROJECT_NAME
+    PROJECT_TYPE: $CI_PROJECT_TYPE 
