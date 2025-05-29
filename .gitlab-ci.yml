@@ -32,7 +32,22 @@ terraform:validate:
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
     - mkdir -p terraform/environments/dev
-    - cp terraform/environments/dev/main.tf terraform/environments/dev/
+    - |
+      cat > terraform/environments/dev/main.tf << 'EOF'
+      provider "aws" {
+        region = "us-east-1"
+      }
+
+      resource "aws_s3_bucket" "dev_bucket" {
+        bucket = "infradevops-dev-bucket"
+        acl    = "private"
+
+        tags = {
+          Name        = "Dev Bucket"
+          Environment = "Development"
+        }
+      }
+      EOF
     - cd terraform/environments/dev
     - terraform init
     - terraform validate
@@ -53,7 +68,22 @@ infra:test:
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
     - mkdir -p terraform/environments/dev
-    - cp terraform/environments/dev/main.tf terraform/environments/dev/
+    - |
+      cat > terraform/environments/dev/main.tf << 'EOF'
+      provider "aws" {
+        region = "us-east-1"
+      }
+
+      resource "aws_s3_bucket" "dev_bucket" {
+        bucket = "infradevops-dev-bucket"
+        acl    = "private"
+
+        tags = {
+          Name        = "Dev Bucket"
+          Environment = "Development"
+        }
+      }
+      EOF
     - cd terraform/environments/dev
     - terraform init
     - terraform plan -out=tfplan
@@ -89,7 +119,22 @@ deploy:dev:
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
     - mkdir -p terraform/environments/dev
-    - cp terraform/environments/dev/main.tf terraform/environments/dev/
+    - |
+      cat > terraform/environments/dev/main.tf << 'EOF'
+      provider "aws" {
+        region = "us-east-1"
+      }
+
+      resource "aws_s3_bucket" "dev_bucket" {
+        bucket = "infradevops-dev-bucket"
+        acl    = "private"
+
+        tags = {
+          Name        = "Dev Bucket"
+          Environment = "Development"
+        }
+      }
+      EOF
     - cd terraform/environments/dev
     - terraform init
     - terraform apply -auto-approve tfplan
@@ -112,7 +157,22 @@ deploy:prod:
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
     - mkdir -p terraform/environments/prod
-    - cp terraform/environments/prod/main.tf terraform/environments/prod/
+    - |
+      cat > terraform/environments/prod/main.tf << 'EOF'
+      provider "aws" {
+        region = "us-east-1"
+      }
+
+      resource "aws_s3_bucket" "prod_bucket" {
+        bucket = "infradevops-prod-bucket"
+        acl    = "private"
+
+        tags = {
+          Name        = "Prod Bucket"
+          Environment = "Production"
+        }
+      }
+      EOF
     - cd terraform/environments/prod
     - terraform init
     - terraform apply -auto-approve tfplan
