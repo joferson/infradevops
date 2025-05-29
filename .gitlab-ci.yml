@@ -7,280 +7,331 @@ variables:
   # PROJECT_NAME: ${PROJECT_NAME}
   # PROJECT_TYPE: ${PROJECT_TYPE}
 
-stages:
-  - create_project
-
-create_project:
-  stage: create_project
+# Templates reutilizáveis
+.template: &template
+  image: alpine:latest
   before_script:
     - apk add --no-cache curl jq git bash
+
+# Funções utilitárias
+.functions: &functions |
+  # Função para criar variável no GitLab
+  create_variable() {
+    local project_id="$1"
+    local key="$2"
+    local value="$3"
+    local response
+
+    echo "Criando variável $key..."
+    response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+      --data "key=$key" \
+      --data "value=$value" \
+      --data "variable_type=env_var" \
+      --data "protected=false" \
+      --data "masked=false" \
+      "$GITLAB_API_URL/projects/$project_id/variables")
+
+    if echo "$response" | jq -e '.key' > /dev/null; then
+      echo "Variável $key criada com sucesso!"
+      return 0
+    else
+      echo "Erro ao criar variável $key:"
+      echo "$response" | jq -r '.message'
+      return 1
+    fi
+  }
+
+  # Função para verificar se variável existe
+  check_variable() {
+    local project_id="$1"
+    local key="$2"
+    local response
+
+    response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+      "$GITLAB_API_URL/projects/$project_id/variables/$key")
+
+    if echo "$response" | jq -e '.key' > /dev/null; then
+      return 0
+    else
+      return 1
+    fi
+  }
+
+  # Função para listar variáveis existentes
+  list_variables() {
+    local project_id="$1"
+    local response
+
+    echo "Variáveis existentes:"
+    echo "----------------"
+    response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+      "$GITLAB_API_URL/projects/$project_id/variables")
+    echo "$response" | jq -r '.[] | "\(.key): \(.value)"'
+    echo "----------------"
+  }
+
+  # Função para criar um novo grupo
+  create_group() {
+    local group_name="$1"
+    local group_path="$2"
+    local group_description="$3"
+    local response
+    local group_id
+
+    echo "Criando grupo $group_name..."
+    response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+      --data "name=$group_name" \
+      --data "path=$group_path" \
+      --data "description=$group_description" \
+      "$GITLAB_API_URL/groups")
+
+    if echo "$response" | jq -e '.id' > /dev/null; then
+      group_id=$(echo "$response" | jq -r '.id')
+      echo "Grupo criado com sucesso! ID: $group_id"
+      echo "$group_id"
+    else
+      echo "Erro ao criar grupo:"
+      echo "$response" | jq -r '.message'
+      echo "1"
+    fi
+  }
+
+  # Função para criar arquivos base do projeto
+  create_project_files() {
+    local project_type="$1"
+    local language="$2"
+    local project_name="$3"
+
+    # Cria diretório temporário
+    mkdir -p /tmp/project_template
+    cd /tmp/project_template
+
+    # Cria arquivos base de acordo com o tipo e linguagem
+    case "$project_type" in
+      "api")
+        case "$language" in
+          "python")
+            # Cria estrutura para API Python
+            mkdir -p src tests
+            echo "# $project_name" > README.md
+            echo "API em Python" >> README.md
+            echo "python-dotenv==1.0.0" > requirements.txt
+            echo "pytest==7.4.0" >> requirements.txt
+            echo "fastapi==0.104.1" >> requirements.txt
+            echo "uvicorn==0.24.0" >> requirements.txt
+            ;;
+          "node")
+            # Cria estrutura para API Node.js
+            mkdir -p src tests
+            echo "# $project_name" > README.md
+            echo "API em Node.js" >> README.md
+            echo '{
+              "name": "'$project_name'",
+              "version": "1.0.0",
+              "description": "API em Node.js",
+              "main": "src/index.js",
+              "scripts": {
+                "start": "node src/index.js",
+                "test": "jest"
+              },
+              "dependencies": {
+                "express": "^4.18.2",
+                "dotenv": "^16.3.1"
+              },
+              "devDependencies": {
+                "jest": "^29.7.0"
+              }
+            }' > package.json
+            ;;
+          *)
+            echo "Error: Linguagem não suportada para API: $language"
+            echo "Valores aceitos: python, node"
+            exit 1
+            ;;
+        esac
+        ;;
+      "web")
+        case "$language" in
+          "react")
+            # Cria estrutura para aplicação React
+            mkdir -p src public
+            echo "# $project_name" > README.md
+            echo "Aplicação Web em React" >> README.md
+            echo '{
+              "name": "'$project_name'",
+              "version": "1.0.0",
+              "private": true,
+              "dependencies": {
+                "react": "^18.2.0",
+                "react-dom": "^18.2.0",
+                "react-scripts": "5.0.1"
+              },
+              "scripts": {
+                "start": "react-scripts start",
+                "build": "react-scripts build",
+                "test": "react-scripts test",
+                "eject": "react-scripts eject"
+              }
+            }' > package.json
+            ;;
+          "vue")
+            # Cria estrutura para aplicação Vue
+            mkdir -p src public
+            echo "# $project_name" > README.md
+            echo "Aplicação Web em Vue" >> README.md
+            echo '{
+              "name": "'$project_name'",
+              "version": "1.0.0",
+              "private": true,
+              "scripts": {
+                "serve": "vue-cli-service serve",
+                "build": "vue-cli-service build",
+                "lint": "vue-cli-service lint"
+              },
+              "dependencies": {
+                "vue": "^3.3.4",
+                "vue-router": "^4.2.5"
+              },
+              "devDependencies": {
+                "@vue/cli-service": "^5.0.8"
+              }
+            }' > package.json
+            ;;
+          *)
+            echo "Error: Linguagem não suportada para Web: $language"
+            echo "Valores aceitos: react, vue"
+            exit 1
+            ;;
+        esac
+        ;;
+      *)
+        echo "Error: Tipo de projeto não suportado: $project_type"
+        echo "Valores aceitos: api, web"
+        exit 1
+        ;;
+    esac
+
+    # Cria arquivo .gitignore
+    echo "node_modules/" > .gitignore
+    echo "dist/" >> .gitignore
+    echo ".env" >> .gitignore
+    echo "__pycache__/" >> .gitignore
+    echo "*.pyc" >> .gitignore
+
+    # Inicializa repositório Git
+    git init
+    git add .
+    git config --global user.email "gitlab-runner@example.com"
+    git config --global user.name "GitLab Runner"
+    git commit -m "Initial commit: Template $project_type em $language"
+  }
+
+stages:
+  - validate
+  - create_group
+  - create_project
+  - setup_project
+
+# Job para validar e criar variáveis
+validate:
+  stage: validate
+  <<: *template
   script:
     - |
+      <<: *functions
+
       # Verifica se o token do GitLab está definido
       if [ -z "$GITLAB_TOKEN" ]; then
         echo "Error: GITLAB_TOKEN não está definido"
         exit 1
       fi
 
-      # Função para ler input do usuário
-      read_input() {
-        local prompt="$1"
-        local default="$2"
-        local input
-        
-        if [ -n "$default" ]; then
-          printf "%s [%s]: " "$prompt" "$default"
-          read input
-          if [ -z "$input" ]; then
-            echo "$default"
-          else
-            echo "$input"
-          fi
-        else
-          printf "%s: " "$prompt"
-          read input
-          echo "$input"
-        fi
-      }
+      # Lista variáveis existentes
+      list_variables "$CI_PROJECT_ID"
 
-      # Função para selecionar opção de uma lista
-      select_option() {
-        local prompt="$1"
-        local options="$2"
-        local selected
-        local num_options
-        
-        echo "$prompt"
-        echo "$options" | nl
-        num_options=$(echo "$options" | wc -l)
-        
-        while true; do
-          printf "Escolha uma opção (1-%d): " "$num_options"
-          read selected
-          if [ "$selected" -ge 1 ] && [ "$selected" -le "$num_options" ]; then
-            echo "$options" | sed -n "${selected}p"
-            break
-          else
-            echo "Opção inválida. Tente novamente."
-          fi
-        done
-      }
-
-      # Função para listar grupos existentes
-      list_groups() {
-        echo "Grupos existentes:"
-        echo "----------------"
-        curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-          "$GITLAB_API_URL/groups" | jq -r '.[] | "ID: \(.id) - Nome: \(.name) - Path: \(.path)"'
-        echo "----------------"
-      }
-
-      # Função para criar um novo grupo
-      create_group() {
-        local group_name="$1"
-        local group_path="$2"
-        local group_description="$3"
-        local response
-        local group_id
-
-        echo "Criando grupo $group_name..."
-        response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-          --data "name=$group_name" \
-          --data "path=$group_path" \
-          --data "description=$group_description" \
-          "$GITLAB_API_URL/groups")
-
-        if echo "$response" | jq -e '.id' > /dev/null; then
-          group_id=$(echo "$response" | jq -r '.id')
-          echo "Grupo criado com sucesso! ID: $group_id"
-          echo "$group_id"
-        else
-          echo "Erro ao criar grupo:"
-          echo "$response" | jq -r '.message'
-          echo "1"
-        fi
-      }
-
-      # Função para criar arquivos base do projeto
-      create_project_files() {
-        local project_type="$1"
-        local language="$2"
-        local project_name="$3"
-
-        # Cria diretório temporário
-        mkdir -p /tmp/project_template
-        cd /tmp/project_template
-
-        # Cria arquivos base de acordo com o tipo e linguagem
-        case "$project_type" in
-          "api")
-            case "$language" in
-              "python")
-                # Cria estrutura para API Python
-                mkdir -p src tests
-                echo "# $project_name" > README.md
-                echo "API em Python" >> README.md
-                echo "python-dotenv==1.0.0" > requirements.txt
-                echo "pytest==7.4.0" >> requirements.txt
-                echo "fastapi==0.104.1" >> requirements.txt
-                echo "uvicorn==0.24.0" >> requirements.txt
-                ;;
-              "node")
-                # Cria estrutura para API Node.js
-                mkdir -p src tests
-                echo "# $project_name" > README.md
-                echo "API em Node.js" >> README.md
-                echo '{
-                  "name": "'$project_name'",
-                  "version": "1.0.0",
-                  "description": "API em Node.js",
-                  "main": "src/index.js",
-                  "scripts": {
-                    "start": "node src/index.js",
-                    "test": "jest"
-                  },
-                  "dependencies": {
-                    "express": "^4.18.2",
-                    "dotenv": "^16.3.1"
-                  },
-                  "devDependencies": {
-                    "jest": "^29.7.0"
-                  }
-                }' > package.json
-                ;;
-              *)
-                echo "Error: Linguagem não suportada para API: $language"
-                echo "Valores aceitos: python, node"
-                exit 1
-                ;;
-            esac
-            ;;
-          "web")
-            case "$language" in
-              "react")
-                # Cria estrutura para aplicação React
-                mkdir -p src public
-                echo "# $project_name" > README.md
-                echo "Aplicação Web em React" >> README.md
-                echo '{
-                  "name": "'$project_name'",
-                  "version": "1.0.0",
-                  "private": true,
-                  "dependencies": {
-                    "react": "^18.2.0",
-                    "react-dom": "^18.2.0",
-                    "react-scripts": "5.0.1"
-                  },
-                  "scripts": {
-                    "start": "react-scripts start",
-                    "build": "react-scripts build",
-                    "test": "react-scripts test",
-                    "eject": "react-scripts eject"
-                  }
-                }' > package.json
-                ;;
-              "vue")
-                # Cria estrutura para aplicação Vue
-                mkdir -p src public
-                echo "# $project_name" > README.md
-                echo "Aplicação Web em Vue" >> README.md
-                echo '{
-                  "name": "'$project_name'",
-                  "version": "1.0.0",
-                  "private": true,
-                  "scripts": {
-                    "serve": "vue-cli-service serve",
-                    "build": "vue-cli-service build",
-                    "lint": "vue-cli-service lint"
-                  },
-                  "dependencies": {
-                    "vue": "^3.3.4",
-                    "vue-router": "^4.2.5"
-                  },
-                  "devDependencies": {
-                    "@vue/cli-service": "^5.0.8"
-                  }
-                }' > package.json
-                ;;
-              *)
-                echo "Error: Linguagem não suportada para Web: $language"
-                echo "Valores aceitos: react, vue"
-                exit 1
-                ;;
-            esac
-            ;;
-          *)
-            echo "Error: Tipo de projeto não suportado: $project_type"
-            echo "Valores aceitos: api, web"
-            exit 1
-            ;;
-        esac
-
-        # Cria arquivo .gitignore
-        echo "node_modules/" > .gitignore
-        echo "dist/" >> .gitignore
-        echo ".env" >> .gitignore
-        echo "__pycache__/" >> .gitignore
-        echo "*.pyc" >> .gitignore
-
-        # Inicializa repositório Git
-        git init
-        git add .
-        git config --global user.email "gitlab-runner@example.com"
-        git config --global user.name "GitLab Runner"
-        git commit -m "Initial commit: Template $project_type em $language"
-      }
-
-      # Interação com o usuário
-      echo "=== Criação de Projeto no GitLab ==="
-      echo
-
-      # Seleciona o tipo de projeto
-      PROJECT_TYPE=$(select_option "Selecione o tipo de projeto:" "api\nweb")
-      echo
-
-      # Seleciona a linguagem baseado no tipo de projeto
-      if [ "$PROJECT_TYPE" = "api" ]; then
-        PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "python\nnode")
-      else
-        PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "react\nvue")
+      # Verifica e cria variáveis necessárias
+      if ! check_variable "$CI_PROJECT_ID" "PROJECT_TYPE"; then
+        echo "Variável PROJECT_TYPE não encontrada. Criando..."
+        create_variable "$CI_PROJECT_ID" "PROJECT_TYPE" "api"
       fi
-      echo
 
-      # Define o nome do projeto
-      PROJECT_NAME=$(read_input "Digite o nome do projeto" "$CI_PROJECT_NAME")
-      echo
+      if ! check_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE"; then
+        echo "Variável PROJECT_LANGUAGE não encontrada. Criando..."
+        if [ "$PROJECT_TYPE" = "api" ]; then
+          create_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE" "python"
+        else
+          create_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE" "react"
+        fi
+      fi
 
-      # Lista grupos existentes
-      list_groups
-      echo
+      if ! check_variable "$CI_PROJECT_ID" "PROJECT_NAME"; then
+        echo "Variável PROJECT_NAME não encontrada. Criando..."
+        create_variable "$CI_PROJECT_ID" "PROJECT_NAME" "$CI_PROJECT_NAME"
+      fi
 
-      # Pergunta sobre o grupo
-      group_choice=$(select_option "O que você deseja fazer com o grupo?" "Usar grupo existente\nCriar novo grupo\nNão usar grupo")
-      echo
+      if ! check_variable "$CI_PROJECT_ID" "CREATE_GROUP"; then
+        echo "Variável CREATE_GROUP não encontrada. Criando..."
+        create_variable "$CI_PROJECT_ID" "CREATE_GROUP" "false"
+      fi
 
-      case "$group_choice" in
-        "Usar grupo existente")
-          GROUP_ID=$(read_input "Digite o ID do grupo existente")
-          namespace_id="$GROUP_ID"
-          ;;
-        "Criar novo grupo")
-          GROUP_NAME=$(read_input "Digite o nome do novo grupo")
-          GROUP_PATH=$(read_input "Digite o path do novo grupo" "$GROUP_NAME")
-          GROUP_DESCRIPTION=$(read_input "Digite a descrição do grupo" "Grupo criado automaticamente")
-          
-          namespace_id=$(create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION")
-          if [ "$namespace_id" = "1" ]; then
-            echo "Erro ao criar grupo. Criando projeto sem grupo..."
-            namespace_id=""
-          fi
-          ;;
-        "Não usar grupo")
-          echo "Criando projeto sem grupo..."
+      # Verifica se as variáveis têm valores válidos
+      if [ "$PROJECT_TYPE" != "api" ] && [ "$PROJECT_TYPE" != "web" ]; then
+        echo "Error: PROJECT_TYPE inválido"
+        echo "Valores aceitos: api, web"
+        exit 1
+      fi
+
+      if [ "$PROJECT_TYPE" = "api" ]; then
+        if [ "$PROJECT_LANGUAGE" != "python" ] && [ "$PROJECT_LANGUAGE" != "node" ]; then
+          echo "Error: PROJECT_LANGUAGE inválido para API"
+          echo "Valores aceitos: python, node"
+          exit 1
+        fi
+      else
+        if [ "$PROJECT_LANGUAGE" != "react" ] && [ "$PROJECT_LANGUAGE" != "vue" ]; then
+          echo "Error: PROJECT_LANGUAGE inválido para Web"
+          echo "Valores aceitos: react, vue"
+          exit 1
+        fi
+      fi
+
+      echo "Todas as variáveis necessárias estão configuradas!"
+  artifacts:
+    reports:
+      dotenv: build.env
+
+# Job para criar grupo (opcional)
+create_group:
+  stage: create_group
+  <<: *template
+  script:
+    - |
+      <<: *functions
+
+      if [ "$CREATE_GROUP" = "true" ]; then
+        namespace_id=$(create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION")
+        if [ "$namespace_id" = "1" ]; then
+          echo "Erro ao criar grupo. Criando projeto sem grupo..."
           namespace_id=""
-          ;;
-      esac
+        fi
+        echo "namespace_id=$namespace_id" >> build.env
+      else
+        echo "namespace_id=$GROUP_ID" >> build.env
+      fi
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CREATE_GROUP == "true" || $GROUP_ID
+  when: manual
+  allow_failure: true
 
+# Job para criar o projeto
+create_project:
+  stage: create_project
+  <<: *template
+  script:
+    - |
       # Cria o projeto no GitLab
       echo "Criando projeto $PROJECT_NAME..."
       
@@ -305,30 +356,56 @@ create_project:
         echo "ID do projeto: $project_id"
         echo "URL do projeto: $project_url"
         
-        # Cria os arquivos do projeto
-        create_project_files "$PROJECT_TYPE" "$PROJECT_LANGUAGE" "$PROJECT_NAME"
-        
-        # Adiciona o repositório remoto e envia os arquivos
-        git remote add origin "$project_ssh_url"
-        git push -u origin master
-        
-        echo "Template do projeto criado e enviado com sucesso!"
+        # Salva informações do projeto para o próximo job
+        echo "project_id=$project_id" >> build.env
+        echo "project_url=$project_url" >> build.env
+        echo "project_ssh_url=$project_ssh_url" >> build.env
+        echo "project_type=$PROJECT_TYPE" >> build.env
+        echo "project_language=$PROJECT_LANGUAGE" >> build.env
+        echo "project_name=$PROJECT_NAME" >> build.env
       else
         echo "Erro ao criar projeto:"
         echo "$response" | jq -r '.message'
         exit 1
       fi
+  artifacts:
+    reports:
+      dotenv: build.env
+  dependencies:
+    - create_group
+
+# Job para configurar o projeto
+setup_project:
+  stage: setup_project
+  <<: *template
+  script:
+    - |
+      <<: *functions
+
+      # Cria os arquivos do projeto
+      create_project_files "$project_type" "$project_language" "$project_name"
+      
+      # Adiciona o repositório remoto e envia os arquivos
+      git remote add origin "$project_ssh_url"
+      git push -u origin master
+      
+      echo "Template do projeto criado e enviado com sucesso!"
+  dependencies:
+    - create_project
+
+# Regras para execução do pipeline
+workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_COMMIT_BRANCH == "master"
-  variables:
-    PROJECT_TYPE: $CI_PROJECT_TYPE
-    PROJECT_LANGUAGE: $CI_PROJECT_LANGUAGE
-    GROUP_ID: $CI_GROUP_ID
-    GROUP_NAME: $CI_GROUP_NAME
-    GROUP_PATH: $CI_GROUP_PATH
 
 # Variáveis que devem ser configuradas no GitLab CI/CD Settings > Variables
 # GITLAB_TOKEN: ${GITLAB_TOKEN}
 # PROJECT_NAME: ${PROJECT_NAME}
-# PROJECT_TYPE: ${PROJECT_TYPE} 
+# PROJECT_TYPE: ${PROJECT_TYPE}
+# PROJECT_LANGUAGE: ${PROJECT_LANGUAGE}
+# CREATE_GROUP: ${CREATE_GROUP}
+# GROUP_NAME: ${GROUP_NAME}
+# GROUP_PATH: ${GROUP_PATH}
+# GROUP_DESCRIPTION: ${GROUP_DESCRIPTION}
+# GROUP_ID: ${GROUP_ID} 
