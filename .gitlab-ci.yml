@@ -40,19 +40,17 @@ create_project:
       # Função para selecionar opção de uma lista
       select_option() {
         local prompt=$1
-        shift
-        local options=("$@")
+        local options=$2
         local selected
         
         echo "$prompt"
-        for i in "${!options[@]}"; do
-          echo "$((i+1))) ${options[$i]}"
-        done
+        echo "$options" | nl
+        local num_options=$(echo "$options" | wc -l)
         
         while true; do
-          read -p "Escolha uma opção (1-${#options[@]}): " selected
-          if [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#options[@]}" ]; then
-            echo "${options[$((selected-1))]}"
+          read -p "Escolha uma opção (1-$num_options): " selected
+          if [ "$selected" -ge 1 ] && [ "$selected" -le "$num_options" ]; then
+            echo "$options" | sed -n "${selected}p"
             break
           else
             echo "Opção inválida. Tente novamente."
@@ -228,17 +226,15 @@ create_project:
       echo
 
       # Seleciona o tipo de projeto
-      project_types=("api" "web")
-      PROJECT_TYPE=$(select_option "Selecione o tipo de projeto:" "${project_types[@]}")
+      PROJECT_TYPE=$(select_option "Selecione o tipo de projeto:" "api\nweb")
       echo
 
       # Seleciona a linguagem baseado no tipo de projeto
       if [ "$PROJECT_TYPE" = "api" ]; then
-        languages=("python" "node")
+        PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "python\nnode")
       else
-        languages=("react" "vue")
+        PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "react\nvue")
       fi
-      PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "${languages[@]}")
       echo
 
       # Define o nome do projeto
@@ -250,8 +246,7 @@ create_project:
       echo
 
       # Pergunta sobre o grupo
-      group_options=("Usar grupo existente" "Criar novo grupo" "Não usar grupo")
-      group_choice=$(select_option "O que você deseja fazer com o grupo?" "${group_options[@]}")
+      group_choice=$(select_option "O que você deseja fazer com o grupo?" "Usar grupo existente\nCriar novo grupo\nNão usar grupo")
       echo
 
       case "$group_choice" in
