@@ -29,19 +29,21 @@ Projeto de infraestrutura e DevOps utilizando Terraform, Helm, ArgoCD e CI/CD.
 
 ## Configuração do GitLab
 
-### 1. Variáveis de Ambiente Necessárias
+### 1. Configuração do Ambiente
 
-Configure as seguintes variáveis de ambiente antes de executar os scripts:
+O projeto inclui um script para configurar as variáveis de ambiente necessárias:
 
 ```bash
-# Credenciais do GitLab
-export GITLAB_EMAIL="seu-email@exemplo.com"
-export GITLAB_USERNAME="seu-username"
-export GITLAB_PASSWORD="sua-senha"
-
-# Token de Acesso Pessoal (PAT) do GitLab
-export GITLAB_TOKEN="seu-token-de-acesso"
+# Execute o script de configuração
+./scripts/setup-env.sh
 ```
+
+O script irá:
+1. Solicitar suas credenciais do GitLab
+2. Criar um arquivo `.env` com as variáveis necessárias
+3. Configurar o projeto com as credenciais fornecidas
+
+**Importante**: O arquivo `.env` contém informações sensíveis e não deve ser versionado no Git.
 
 ### 2. Criação da Conta e Token de Acesso
 
