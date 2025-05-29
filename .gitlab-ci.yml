@@ -14,7 +14,7 @@ variables:
     - apk add --no-cache curl jq git bash
 
 # Funções utilitárias
-.functions: &functions |
+.functions: &functions
   # Função para criar variável no GitLab
   create_variable() {
     local project_id="$1"
@@ -238,8 +238,6 @@ validate:
   <<: *template
   script:
     - |
-      <<: *functions
-
       # Verifica se o token do GitLab está definido
       if [ -z "$GITLAB_TOKEN" ]; then
         echo "Error: GITLAB_TOKEN não está definido"
@@ -247,31 +245,69 @@ validate:
       fi
 
       # Lista variáveis existentes
-      list_variables "$CI_PROJECT_ID"
+      echo "Variáveis existentes:"
+      echo "----------------"
+      curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables" | jq -r '.[] | "\(.key): \(.value)"'
+      echo "----------------"
 
       # Verifica e cria variáveis necessárias
-      if ! check_variable "$CI_PROJECT_ID" "PROJECT_TYPE"; then
+      if ! curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables/PROJECT_TYPE" | jq -e '.key' > /dev/null; then
         echo "Variável PROJECT_TYPE não encontrada. Criando..."
-        create_variable "$CI_PROJECT_ID" "PROJECT_TYPE" "api"
+        curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --data "key=PROJECT_TYPE" \
+          --data "value=api" \
+          --data "variable_type=env_var" \
+          --data "protected=false" \
+          --data "masked=false" \
+          "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables"
       fi
 
-      if ! check_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE"; then
+      if ! curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables/PROJECT_LANGUAGE" | jq -e '.key' > /dev/null; then
         echo "Variável PROJECT_LANGUAGE não encontrada. Criando..."
         if [ "$PROJECT_TYPE" = "api" ]; then
-          create_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE" "python"
+          curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            --data "key=PROJECT_LANGUAGE" \
+            --data "value=python" \
+            --data "variable_type=env_var" \
+            --data "protected=false" \
+            --data "masked=false" \
+            "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables"
         else
-          create_variable "$CI_PROJECT_ID" "PROJECT_LANGUAGE" "react"
+          curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            --data "key=PROJECT_LANGUAGE" \
+            --data "value=react" \
+            --data "variable_type=env_var" \
+            --data "protected=false" \
+            --data "masked=false" \
+            "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables"
         fi
       fi
 
-      if ! check_variable "$CI_PROJECT_ID" "PROJECT_NAME"; then
+      if ! curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables/PROJECT_NAME" | jq -e '.key' > /dev/null; then
         echo "Variável PROJECT_NAME não encontrada. Criando..."
-        create_variable "$CI_PROJECT_ID" "PROJECT_NAME" "$CI_PROJECT_NAME"
+        curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --data "key=PROJECT_NAME" \
+          --data "value=$CI_PROJECT_NAME" \
+          --data "variable_type=env_var" \
+          --data "protected=false" \
+          --data "masked=false" \
+          "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables"
       fi
 
-      if ! check_variable "$CI_PROJECT_ID" "CREATE_GROUP"; then
+      if ! curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables/CREATE_GROUP" | jq -e '.key' > /dev/null; then
         echo "Variável CREATE_GROUP não encontrada. Criando..."
-        create_variable "$CI_PROJECT_ID" "CREATE_GROUP" "false"
+        curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --data "key=CREATE_GROUP" \
+          --data "value=false" \
+          --data "variable_type=env_var" \
+          --data "protected=false" \
+          --data "masked=false" \
+          "$GITLAB_API_URL/projects/$CI_PROJECT_ID/variables"
       fi
 
       # Verifica se as variáveis têm valores válidos
@@ -306,15 +342,22 @@ create_group:
   <<: *template
   script:
     - |
-      <<: *functions
-
       if [ "$CREATE_GROUP" = "true" ]; then
-        namespace_id=$(create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION")
-        if [ "$namespace_id" = "1" ]; then
+        echo "Criando grupo $GROUP_NAME..."
+        response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --data "name=$GROUP_NAME" \
+          --data "path=$GROUP_PATH" \
+          --data "description=$GROUP_DESCRIPTION" \
+          "$GITLAB_API_URL/groups")
+
+        if echo "$response" | jq -e '.id' > /dev/null; then
+          namespace_id=$(echo "$response" | jq -r '.id')
+          echo "Grupo criado com sucesso! ID: $namespace_id"
+          echo "namespace_id=$namespace_id" >> build.env
+        else
           echo "Erro ao criar grupo. Criando projeto sem grupo..."
-          namespace_id=""
+          echo "namespace_id=" >> build.env
         fi
-        echo "namespace_id=$namespace_id" >> build.env
       else
         echo "namespace_id=$GROUP_ID" >> build.env
       fi
@@ -380,10 +423,113 @@ setup_project:
   <<: *template
   script:
     - |
-      <<: *functions
+      # Cria diretório temporário
+      mkdir -p /tmp/project_template
+      cd /tmp/project_template
 
-      # Cria os arquivos do projeto
-      create_project_files "$project_type" "$project_language" "$project_name"
+      # Cria arquivos base de acordo com o tipo e linguagem
+      case "$project_type" in
+        "api")
+          case "$project_language" in
+            "python")
+              # Cria estrutura para API Python
+              mkdir -p src tests
+              echo "# $project_name" > README.md
+              echo "API em Python" >> README.md
+              echo "python-dotenv==1.0.0" > requirements.txt
+              echo "pytest==7.4.0" >> requirements.txt
+              echo "fastapi==0.104.1" >> requirements.txt
+              echo "uvicorn==0.24.0" >> requirements.txt
+              ;;
+            "node")
+              # Cria estrutura para API Node.js
+              mkdir -p src tests
+              echo "# $project_name" > README.md
+              echo "API em Node.js" >> README.md
+              echo '{
+                "name": "'$project_name'",
+                "version": "1.0.0",
+                "description": "API em Node.js",
+                "main": "src/index.js",
+                "scripts": {
+                  "start": "node src/index.js",
+                  "test": "jest"
+                },
+                "dependencies": {
+                  "express": "^4.18.2",
+                  "dotenv": "^16.3.1"
+                },
+                "devDependencies": {
+                  "jest": "^29.7.0"
+                }
+              }' > package.json
+              ;;
+          esac
+          ;;
+        "web")
+          case "$project_language" in
+            "react")
+              # Cria estrutura para aplicação React
+              mkdir -p src public
+              echo "# $project_name" > README.md
+              echo "Aplicação Web em React" >> README.md
+              echo '{
+                "name": "'$project_name'",
+                "version": "1.0.0",
+                "private": true,
+                "dependencies": {
+                  "react": "^18.2.0",
+                  "react-dom": "^18.2.0",
+                  "react-scripts": "5.0.1"
+                },
+                "scripts": {
+                  "start": "react-scripts start",
+                  "build": "react-scripts build",
+                  "test": "react-scripts test",
+                  "eject": "react-scripts eject"
+                }
+              }' > package.json
+              ;;
+            "vue")
+              # Cria estrutura para aplicação Vue
+              mkdir -p src public
+              echo "# $project_name" > README.md
+              echo "Aplicação Web em Vue" >> README.md
+              echo '{
+                "name": "'$project_name'",
+                "version": "1.0.0",
+                "private": true,
+                "scripts": {
+                  "serve": "vue-cli-service serve",
+                  "build": "vue-cli-service build",
+                  "lint": "vue-cli-service lint"
+                },
+                "dependencies": {
+                  "vue": "^3.3.4",
+                  "vue-router": "^4.2.5"
+                },
+                "devDependencies": {
+                  "@vue/cli-service": "^5.0.8"
+                }
+              }' > package.json
+              ;;
+          esac
+          ;;
+      esac
+
+      # Cria arquivo .gitignore
+      echo "node_modules/" > .gitignore
+      echo "dist/" >> .gitignore
+      echo ".env" >> .gitignore
+      echo "__pycache__/" >> .gitignore
+      echo "*.pyc" >> .gitignore
+
+      # Inicializa repositório Git
+      git init
+      git add .
+      git config --global user.email "gitlab-runner@example.com"
+      git config --global user.name "GitLab Runner"
+      git commit -m "Initial commit: Template $project_type em $project_language"
       
       # Adiciona o repositório remoto e envia os arquivos
       git remote add origin "$project_ssh_url"
