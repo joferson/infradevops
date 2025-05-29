@@ -25,8 +25,10 @@ create_project:
       # Função para listar grupos existentes
       list_groups() {
         echo "Grupos existentes:"
+        echo "----------------"
         curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
           "$GITLAB_API_URL/groups" | jq -r '.[] | "ID: \(.id) - Nome: \(.name) - Path: \(.path)"'
+        echo "----------------"
       }
 
       # Função para criar um novo grupo
@@ -45,7 +47,7 @@ create_project:
         if echo "$response" | jq -e '.id' > /dev/null; then
           group_id=$(echo "$response" | jq -r '.id')
           echo "Grupo criado com sucesso! ID: $group_id"
-          return 0
+          return $group_id
         else
           echo "Erro ao criar grupo:"
           echo "$response" | jq -r '.message'
@@ -171,29 +173,37 @@ create_project:
       # Lista grupos existentes
       list_groups
 
-      # Verifica se o grupo existe
+      # Define o namespace_id (grupo) para o projeto
       if [ -n "$GROUP_ID" ]; then
         # Usa grupo existente
-        group_id=$GROUP_ID
-      else
+        namespace_id=$GROUP_ID
+        echo "Usando grupo existente com ID: $namespace_id"
+      elif [ -n "$GROUP_NAME" ] && [ -n "$GROUP_PATH" ]; then
         # Cria novo grupo
-        if [ -z "$GROUP_NAME" ] || [ -z "$GROUP_PATH" ]; then
-          echo "Error: GROUP_NAME e GROUP_PATH são necessários para criar um novo grupo"
-          exit 1
-        fi
+        echo "Criando novo grupo: $GROUP_NAME"
         create_group "$GROUP_NAME" "$GROUP_PATH" "Grupo criado automaticamente"
-        group_id=$?
+        namespace_id=$?
+        if [ $namespace_id -eq 1 ]; then
+          echo "Erro ao criar grupo. Criando projeto sem grupo..."
+          namespace_id=""
+        fi
+      else
+        echo "Nenhum grupo especificado. Criando projeto sem grupo..."
+        namespace_id=""
       fi
 
-      # Cria o projeto no GitLab dentro do grupo
-      echo "Criando projeto $CI_PROJECT_NAME no grupo $group_id..."
+      # Cria o projeto no GitLab
+      echo "Criando projeto $CI_PROJECT_NAME..."
+      
+      # Prepara os dados para a requisição
+      data="name=$CI_PROJECT_NAME&description=Template de projeto&initialize_with_readme=false"
+      if [ -n "$namespace_id" ]; then
+        data="$data&namespace_id=$namespace_id"
+      fi
       
       # Faz a requisição para criar o projeto
       response=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-        --data "name=$CI_PROJECT_NAME" \
-        --data "description=Template de projeto" \
-        --data "initialize_with_readme=false" \
-        --data "namespace_id=$group_id" \
+        --data "$data" \
         "$GITLAB_API_URL/projects")
       
       # Verifica se a requisição foi bem sucedida
