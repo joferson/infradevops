@@ -42,19 +42,33 @@ terraform:validate:
         backend "local" {}
       }
 
+      variable "environment" {
+        description = "Environment name"
+        type        = string
+      }
+
+      variable "bucket_name" {
+        description = "Name of the S3 bucket"
+        type        = string
+      }
+
       provider "aws" {
         region = "us-east-1"
-        # Credenciais devem ser configuradas via variáveis de ambiente
-        # access_key = var.aws_access_key
-        # secret_key = var.aws_secret_key
+        # Credenciais mock para testes
+        access_key = "test"
+        secret_key = "test"
+        skip_credentials_validation = true
+        skip_requesting_account_id = true
+        skip_metadata_api_check = true
+        s3_use_path_style = true
       }
 
       resource "aws_s3_bucket" "dev_bucket" {
-        bucket = "infradevops-dev-bucket"
+        bucket = var.bucket_name
 
         tags = {
           Name        = "Dev Bucket"
-          Environment = "Development"
+          Environment = var.environment
         }
       }
 
@@ -89,19 +103,33 @@ infra:test:
         backend "local" {}
       }
 
+      variable "environment" {
+        description = "Environment name"
+        type        = string
+      }
+
+      variable "bucket_name" {
+        description = "Name of the S3 bucket"
+        type        = string
+      }
+
       provider "aws" {
         region = "us-east-1"
-        # Credenciais devem ser configuradas via variáveis de ambiente
-        # access_key = var.aws_access_key
-        # secret_key = var.aws_secret_key
+        # Credenciais mock para testes
+        access_key = "test"
+        secret_key = "test"
+        skip_credentials_validation = true
+        skip_requesting_account_id = true
+        skip_metadata_api_check = true
+        s3_use_path_style = true
       }
 
       resource "aws_s3_bucket" "dev_bucket" {
-        bucket = "infradevops-dev-bucket"
+        bucket = var.bucket_name
 
         tags = {
           Name        = "Dev Bucket"
-          Environment = "Development"
+          Environment = var.environment
         }
       }
 
@@ -156,19 +184,33 @@ deploy:dev:
         backend "local" {}
       }
 
+      variable "environment" {
+        description = "Environment name"
+        type        = string
+      }
+
+      variable "bucket_name" {
+        description = "Name of the S3 bucket"
+        type        = string
+      }
+
       provider "aws" {
         region = "us-east-1"
-        # Credenciais devem ser configuradas via variáveis de ambiente
-        # access_key = var.aws_access_key
-        # secret_key = var.aws_secret_key
+        # Credenciais mock para testes
+        access_key = "test"
+        secret_key = "test"
+        skip_credentials_validation = true
+        skip_requesting_account_id = true
+        skip_metadata_api_check = true
+        s3_use_path_style = true
       }
 
       resource "aws_s3_bucket" "dev_bucket" {
-        bucket = "infradevops-dev-bucket"
+        bucket = var.bucket_name
 
         tags = {
           Name        = "Dev Bucket"
-          Environment = "Development"
+          Environment = var.environment
         }
       }
 
@@ -205,19 +247,33 @@ deploy:prod:
         backend "local" {}
       }
 
+      variable "environment" {
+        description = "Environment name"
+        type        = string
+      }
+
+      variable "bucket_name" {
+        description = "Name of the S3 bucket"
+        type        = string
+      }
+
       provider "aws" {
         region = "us-east-1"
-        # Credenciais devem ser configuradas via variáveis de ambiente
-        # access_key = var.aws_access_key
-        # secret_key = var.aws_secret_key
+        # Credenciais mock para testes
+        access_key = "test"
+        secret_key = "test"
+        skip_credentials_validation = true
+        skip_requesting_account_id = true
+        skip_metadata_api_check = true
+        s3_use_path_style = true
       }
 
       resource "aws_s3_bucket" "prod_bucket" {
-        bucket = "infradevops-prod-bucket"
+        bucket = var.bucket_name
 
         tags = {
           Name        = "Prod Bucket"
-          Environment = "Production"
+          Environment = var.environment
         }
       }
 
