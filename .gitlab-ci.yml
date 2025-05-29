@@ -31,6 +31,8 @@ terraform:validate:
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
+    - mkdir -p terraform/environments/dev
+    - cp terraform/environments/dev/main.tf terraform/environments/dev/
     - cd terraform/environments/dev
     - terraform init
     - terraform validate
@@ -50,6 +52,8 @@ infra:test:
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
+    - mkdir -p terraform/environments/dev
+    - cp terraform/environments/dev/main.tf terraform/environments/dev/
     - cd terraform/environments/dev
     - terraform init
     - terraform plan -out=tfplan
@@ -84,6 +88,8 @@ deploy:dev:
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
+    - mkdir -p terraform/environments/dev
+    - cp terraform/environments/dev/main.tf terraform/environments/dev/
     - cd terraform/environments/dev
     - terraform init
     - terraform apply -auto-approve tfplan
@@ -105,6 +111,8 @@ deploy:prod:
     - mv terraform /usr/local/bin/
     - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
   script:
+    - mkdir -p terraform/environments/prod
+    - cp terraform/environments/prod/main.tf terraform/environments/prod/
     - cd terraform/environments/prod
     - terraform init
     - terraform apply -auto-approve tfplan
