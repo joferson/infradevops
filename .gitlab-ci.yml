@@ -13,7 +13,7 @@ stages:
 create_project:
   stage: create_project
   before_script:
-    - apk add --no-cache curl jq git
+    - apk add --no-cache curl jq git bash
   script:
     - |
       # Verifica se o token do GitLab está definido
@@ -22,19 +22,43 @@ create_project:
         exit 1
       fi
 
-      # Verifica se o tipo de projeto e linguagem estão definidos
-      if [ -z "$PROJECT_TYPE" ]; then
-        echo "Error: PROJECT_TYPE não está definido"
-        echo "Valores aceitos: api, web"
-        exit 1
-      fi
+      # Função para ler input do usuário
+      read_input() {
+        local prompt=$1
+        local default=$2
+        local input
+        
+        if [ -n "$default" ]; then
+          read -p "$prompt [$default]: " input
+          echo "${input:-$default}"
+        else
+          read -p "$prompt: " input
+          echo "$input"
+        fi
+      }
 
-      if [ -z "$PROJECT_LANGUAGE" ]; then
-        echo "Error: PROJECT_LANGUAGE não está definido"
-        echo "Valores aceitos para API: python, node"
-        echo "Valores aceitos para Web: react, vue"
-        exit 1
-      fi
+      # Função para selecionar opção de uma lista
+      select_option() {
+        local prompt=$1
+        shift
+        local options=("$@")
+        local selected
+        
+        echo "$prompt"
+        for i in "${!options[@]}"; do
+          echo "$((i+1))) ${options[$i]}"
+        done
+        
+        while true; do
+          read -p "Escolha uma opção (1-${#options[@]}): " selected
+          if [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#options[@]}" ]; then
+            echo "${options[$((selected-1))]}"
+            break
+          else
+            echo "Opção inválida. Tente novamente."
+          fi
+        done
+      }
 
       # Função para listar grupos existentes
       list_groups() {
@@ -199,33 +223,65 @@ create_project:
         git commit -m "Initial commit: Template $project_type em $language"
       }
 
+      # Interação com o usuário
+      echo "=== Criação de Projeto no GitLab ==="
+      echo
+
+      # Seleciona o tipo de projeto
+      project_types=("api" "web")
+      PROJECT_TYPE=$(select_option "Selecione o tipo de projeto:" "${project_types[@]}")
+      echo
+
+      # Seleciona a linguagem baseado no tipo de projeto
+      if [ "$PROJECT_TYPE" = "api" ]; then
+        languages=("python" "node")
+      else
+        languages=("react" "vue")
+      fi
+      PROJECT_LANGUAGE=$(select_option "Selecione a linguagem:" "${languages[@]}")
+      echo
+
+      # Define o nome do projeto
+      PROJECT_NAME=$(read_input "Digite o nome do projeto" "$CI_PROJECT_NAME")
+      echo
+
       # Lista grupos existentes
       list_groups
+      echo
 
-      # Define o namespace_id (grupo) para o projeto
-      if [ -n "$GROUP_ID" ]; then
-        # Usa grupo existente
-        namespace_id=$GROUP_ID
-        echo "Usando grupo existente com ID: $namespace_id"
-      elif [ -n "$GROUP_NAME" ] && [ -n "$GROUP_PATH" ]; then
-        # Cria novo grupo
-        echo "Criando novo grupo: $GROUP_NAME"
-        create_group "$GROUP_NAME" "$GROUP_PATH" "Grupo criado automaticamente"
-        namespace_id=$?
-        if [ $namespace_id -eq 1 ]; then
-          echo "Erro ao criar grupo. Criando projeto sem grupo..."
+      # Pergunta sobre o grupo
+      group_options=("Usar grupo existente" "Criar novo grupo" "Não usar grupo")
+      group_choice=$(select_option "O que você deseja fazer com o grupo?" "${group_options[@]}")
+      echo
+
+      case "$group_choice" in
+        "Usar grupo existente")
+          GROUP_ID=$(read_input "Digite o ID do grupo existente")
+          namespace_id=$GROUP_ID
+          ;;
+        "Criar novo grupo")
+          GROUP_NAME=$(read_input "Digite o nome do novo grupo")
+          GROUP_PATH=$(read_input "Digite o path do novo grupo" "$GROUP_NAME")
+          GROUP_DESCRIPTION=$(read_input "Digite a descrição do grupo" "Grupo criado automaticamente")
+          
+          create_group "$GROUP_NAME" "$GROUP_PATH" "$GROUP_DESCRIPTION"
+          namespace_id=$?
+          if [ $namespace_id -eq 1 ]; then
+            echo "Erro ao criar grupo. Criando projeto sem grupo..."
+            namespace_id=""
+          fi
+          ;;
+        "Não usar grupo")
+          echo "Criando projeto sem grupo..."
           namespace_id=""
-        fi
-      else
-        echo "Nenhum grupo especificado. Criando projeto sem grupo..."
-        namespace_id=""
-      fi
+          ;;
+      esac
 
       # Cria o projeto no GitLab
-      echo "Criando projeto $CI_PROJECT_NAME..."
+      echo "Criando projeto $PROJECT_NAME..."
       
       # Prepara os dados para a requisição
-      data="name=$CI_PROJECT_NAME&description=Template de projeto $PROJECT_TYPE em $PROJECT_LANGUAGE&initialize_with_readme=false"
+      data="name=$PROJECT_NAME&description=Template de projeto $PROJECT_TYPE em $PROJECT_LANGUAGE&initialize_with_readme=false"
       if [ -n "$namespace_id" ]; then
         data="$data&namespace_id=$namespace_id"
       fi
@@ -246,7 +302,7 @@ create_project:
         echo "URL do projeto: $project_url"
         
         # Cria os arquivos do projeto
-        create_project_files "$PROJECT_TYPE" "$PROJECT_LANGUAGE" "$CI_PROJECT_NAME"
+        create_project_files "$PROJECT_TYPE" "$PROJECT_LANGUAGE" "$PROJECT_NAME"
         
         # Adiciona o repositório remoto e envia os arquivos
         git remote add origin "$project_ssh_url"
