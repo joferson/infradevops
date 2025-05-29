@@ -22,6 +22,20 @@ create_project:
         exit 1
       fi
 
+      # Verifica se o tipo de projeto e linguagem estão definidos
+      if [ -z "$PROJECT_TYPE" ]; then
+        echo "Error: PROJECT_TYPE não está definido"
+        echo "Valores aceitos: api, web"
+        exit 1
+      fi
+
+      if [ -z "$PROJECT_LANGUAGE" ]; then
+        echo "Error: PROJECT_LANGUAGE não está definido"
+        echo "Valores aceitos para API: python, node"
+        echo "Valores aceitos para Web: react, vue"
+        exit 1
+      fi
+
       # Função para listar grupos existentes
       list_groups() {
         echo "Grupos existentes:"
@@ -102,6 +116,11 @@ create_project:
                   }
                 }' > package.json
                 ;;
+              *)
+                echo "Error: Linguagem não suportada para API: $language"
+                echo "Valores aceitos: python, node"
+                exit 1
+                ;;
             esac
             ;;
           "web")
@@ -151,7 +170,17 @@ create_project:
                   }
                 }' > package.json
                 ;;
+              *)
+                echo "Error: Linguagem não suportada para Web: $language"
+                echo "Valores aceitos: react, vue"
+                exit 1
+                ;;
             esac
+            ;;
+          *)
+            echo "Error: Tipo de projeto não suportado: $project_type"
+            echo "Valores aceitos: api, web"
+            exit 1
             ;;
         esac
 
@@ -196,7 +225,7 @@ create_project:
       echo "Criando projeto $CI_PROJECT_NAME..."
       
       # Prepara os dados para a requisição
-      data="name=$CI_PROJECT_NAME&description=Template de projeto&initialize_with_readme=false"
+      data="name=$CI_PROJECT_NAME&description=Template de projeto $PROJECT_TYPE em $PROJECT_LANGUAGE&initialize_with_readme=false"
       if [ -n "$namespace_id" ]; then
         data="$data&namespace_id=$namespace_id"
       fi
